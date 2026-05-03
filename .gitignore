@@ -1,0 +1,21 @@
+# Secrets / local overrides — never commit filled copies
+.env*
+!.env.example
+
+venv/
+.venv/
+__pycache__/
+*.pyc
+.Python
+
+# Install deps with pip (requirements.txt); exclude legacy vendored bundles
+pymysql/
+better_profanity/
+*.dist-info/
+PyMySQL*.dist-info/
+better_profanity*.dist-info/
+function.zip
+wordlist/
+unicode_characters/
+
+.vscode/
