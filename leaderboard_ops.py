@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 
 from better_profanity import profanity
-from wordhunter_scoring import iter_tiles, score_word_for_validation
+from wordhunter_scoring import score_word_for_validation
 
 _NAME_SANITIZE_RE = re.compile(r"[^a-zA-Z]")
 _MAX_PLAYER_NAME_LEN = 8
@@ -54,29 +54,15 @@ def validate_player_name(player: str) -> str | None:
     return None
 
 
-def _consume_word_tiles_from_pool(pool: list[str], word: str) -> bool:
-    for tile in iter_tiles(word):
-        key = str(tile or "").lower()
-        try:
-            pool.remove(key)
-        except ValueError:
-            return False
-    return True
-
-
 def validate_score_payload(payload, submitted_score: int, trophy: str) -> int:
-    """Validate words against gameLetters and return computed score, or 0 if invalid."""
+    """Validate wordsPlayed + trophy and return computed score, or 0 if invalid."""
     if not isinstance(payload, dict):
         return 0
 
-    game_letters = payload.get("gameLetters")
     words_played = payload.get("wordsPlayed")
-    if not isinstance(game_letters, list) or not isinstance(words_played, list):
-        return 0
-    if not words_played:
+    if not isinstance(words_played, list) or not words_played:
         return 0
 
-    pool = [str(t or "").lower() for t in game_letters]
     score = 0
     trophy_found = False
     trophy_norm = str(trophy or "").strip().lower()
@@ -87,8 +73,6 @@ def validate_score_payload(payload, submitted_score: int, trophy: str) -> int:
             return 0
         if word == trophy_norm:
             trophy_found = True
-        if not _consume_word_tiles_from_pool(pool, word):
-            return 0
         try:
             score += score_word_for_validation(word)
         except (KeyError, ValueError):

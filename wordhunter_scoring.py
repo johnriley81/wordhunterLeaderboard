@@ -1,9 +1,9 @@
 """Word scoring for server-side validation (wordhunter_cert parity).
 
-Canonical rule:
+Canonical rule (matches live client ``getLiveWordScoreBreakdownFromLabels``):
   wordTotal = letterSum * length
   - letterSum: sum of per-tile weights along the path (``qu`` is one tile).
-  - length: tile count along the path (revisits count).
+  - length: sum of tile label string lengths (``qu`` counts as 2).
 
 Weights default from ``tile_weights.json`` next to this module (replace with an export
 from the game repo ``tools/wordhunter_cert`` when they differ). Override path with env
@@ -57,7 +57,7 @@ def _tile_weights() -> dict[str, int]:
 def score_word_for_validation(word: str) -> int:
     weights = _tile_weights()
     tiles = iter_tiles(word)
-    length = len(tiles)
+    length = sum(len(t) for t in tiles)
     letter_sum = 0
     for t in tiles:
         if t not in weights:
