@@ -5,7 +5,10 @@ from __future__ import annotations
 import re
 
 from better_profanity import profanity
-from wordhunter_scoring import score_word_for_validation
+from wordhunter_scoring import (
+    score_word_for_validation,
+    words_unique_tiles_subset_of_game_letters,
+)
 
 _NAME_SANITIZE_RE = re.compile(r"[^a-zA-Z]")
 _MAX_PLAYER_NAME_LEN = 8
@@ -61,6 +64,10 @@ def validate_score_payload(payload, submitted_score: int, trophy: str) -> int:
 
     words_played = payload.get("wordsPlayed")
     if not isinstance(words_played, list) or not words_played:
+        return 0
+
+    game_letters = payload.get("gameLetters")
+    if not words_unique_tiles_subset_of_game_letters(game_letters, words_played):
         return 0
 
     score = 0

@@ -1,6 +1,7 @@
 import unittest
 
 from leaderboard_ops import validate_player_name, validate_score_payload
+from wordhunter_scoring import score_word_for_validation
 from rate_limit import check_rate_limit, reset_rate_limits_for_tests
 
 
@@ -123,6 +124,14 @@ class ValidateScorePayloadTests(unittest.TestCase):
             "wordsPlayed": ["cat"],
         }
         self.assertEqual(validate_score_payload(payload, 6, "dog"), 0)
+
+    def test_rejects_word_with_tile_not_in_game_letters(self):
+        dog_score = score_word_for_validation("dog")
+        payload = {
+            "gameLetters": ["d", "o"],
+            "wordsPlayed": ["dog"],
+        }
+        self.assertEqual(validate_score_payload(payload, dog_score, "dog"), 0)
 
 
 class ValidatePlayerNameTests(unittest.TestCase):

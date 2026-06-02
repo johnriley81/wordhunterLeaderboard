@@ -54,6 +54,31 @@ def _tile_weights() -> dict[str, int]:
     return {str(k).lower(): int(v) for k, v in raw.items()}
 
 
+def unique_tiles_from_words(words_played: list) -> set[str]:
+    """Unique tile labels across all played words (``qu`` is one tile)."""
+    units: set[str] = set()
+    for raw_word in words_played:
+        for tile in iter_tiles(str(raw_word or "").lower()):
+            units.add(tile)
+    return units
+
+
+def available_tiles_from_game_letters(game_letters) -> list[str]:
+    """Non-empty tiles from starting grid + next letters."""
+    if not isinstance(game_letters, list):
+        return []
+    return [str(t or "").lower() for t in game_letters if str(t or "").lower()]
+
+
+def words_unique_tiles_subset_of_game_letters(game_letters, words_played: list) -> bool:
+    """Every unique tile in words must appear at least once in game letters (ignore counts)."""
+    needed = unique_tiles_from_words(words_played)
+    if not needed:
+        return False
+    available = set(available_tiles_from_game_letters(game_letters))
+    return needed.issubset(available)
+
+
 def score_word_for_validation(word: str) -> int:
     weights = _tile_weights()
     tiles = iter_tiles(word)
