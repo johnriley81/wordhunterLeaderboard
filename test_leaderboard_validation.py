@@ -39,10 +39,20 @@ class RateLimitTests(unittest.TestCase):
     def setUp(self):
         reset_rate_limits_for_tests()
 
-    def test_allows_first_then_blocks_within_window(self):
+    def test_allows_first_then_blocks_within_window_for_same_method(self):
         ip = "203.0.113.1"
-        self.assertTrue(check_rate_limit(ip))
-        self.assertFalse(check_rate_limit(ip))
+        self.assertTrue(check_rate_limit(ip, "GET"))
+        self.assertFalse(check_rate_limit(ip, "GET"))
+
+    def test_get_then_post_both_allowed_in_quick_succession(self):
+        ip = "203.0.113.2"
+        self.assertTrue(check_rate_limit(ip, "GET"))
+        self.assertTrue(check_rate_limit(ip, "POST"))
+
+    def test_post_then_get_both_allowed_in_quick_succession(self):
+        ip = "203.0.113.3"
+        self.assertTrue(check_rate_limit(ip, "POST"))
+        self.assertTrue(check_rate_limit(ip, "GET"))
 
 
 if __name__ == "__main__":

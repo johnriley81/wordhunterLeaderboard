@@ -68,7 +68,7 @@ def lambda_handler(event, context):
     puzzle = int(event['pathParameters']['puzzle'])
     body = None
 
-    if not check_rate_limit(_client_ip(event)):
+    if not check_rate_limit(_client_ip(event), http_method):
         return _json_response(
             429,
             {'message': 'Rate limit exceeded. Try again in one minute.'},

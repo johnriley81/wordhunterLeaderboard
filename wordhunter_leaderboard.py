@@ -40,7 +40,7 @@ def _client_ip() -> str:
 
 @app.route("/leaderboard/<int:puzzle>", methods=["GET", "POST"])
 def leaderboard(puzzle):
-    if not check_rate_limit(_client_ip()):
+    if not check_rate_limit(_client_ip(), request.method):
         resp = jsonify({"message": "Rate limit exceeded. Try again in one minute."})
         resp.status_code = 429
         for k, v in _CORS_HEADER.items():

@@ -1,4 +1,4 @@
-"""Simple in-process IP rate limiting (one request per 60 seconds)."""
+"""Simple in-process IP rate limiting (one request per method per 60 seconds)."""
 
 from __future__ import annotations
 
@@ -11,9 +11,15 @@ _lock = Lock()
 _last_request_at: dict[str, float] = {}
 
 
-def check_rate_limit(client_ip: str) -> bool:
+def _rate_limit_key(client_ip: str, method: str) -> str:
+    ip = str(client_ip or "unknown").strip() or "unknown"
+    http_method = str(method or "GET").strip().upper() or "GET"
+    return f"{http_method}:{ip}"
+
+
+def check_rate_limit(client_ip: str, method: str = "GET") -> bool:
     """Return True when the request is allowed."""
-    key = str(client_ip or "unknown").strip() or "unknown"
+    key = _rate_limit_key(client_ip, method)
     now = time.monotonic()
     with _lock:
         last = _last_request_at.get(key)

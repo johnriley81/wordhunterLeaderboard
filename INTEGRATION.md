@@ -89,7 +89,7 @@ Game is served at **https://wordhunter.io**. Successful Flask responses set `Acc
 
 - Prefer **parameterized SQL** for `player`, `trophy`, and numeric fields (current code uses string interpolation).
 - **Secrets Manager** secret id should follow environment (not only `test/wordhunterLeaderboard` in code).
-- **Rate limit:** one request per IP per minute (`rate_limit.py`).
+- **Rate limit:** one request per IP per HTTP method per minute (`rate_limit.py`); GET and POST each have their own 60s window so endgame GET + submit POST both succeed.
 
 ---
 
@@ -121,5 +121,5 @@ Game is served at **https://wordhunter.io**. Successful Flask responses set `Acc
 | `leaderboard_ops.py` | `validate_score_payload`, `validate_player_name`, `try_insert_leaderboard` |
 | `wordhunter_scoring.py` | Tile segmentation + `letterSum * length` |
 | `puzzle_calendar.py` | Rotation epoch + `template_row_index` |
-| `rate_limit.py` | Per-IP request throttling |
+| `rate_limit.py` | Per-IP, per-method request throttling |
 | `tile_weights.json` | Default tile weights (sync from cert if needed) |
