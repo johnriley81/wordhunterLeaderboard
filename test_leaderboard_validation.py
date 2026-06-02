@@ -39,7 +39,7 @@ class RateLimitTests(unittest.TestCase):
     def setUp(self):
         reset_rate_limits_for_tests()
 
-    def test_allows_first_then_blocks_within_minute(self):
+    def test_allows_first_then_blocks_within_window(self):
         ip = "203.0.113.1"
         self.assertTrue(check_rate_limit(ip))
         self.assertFalse(check_rate_limit(ip))

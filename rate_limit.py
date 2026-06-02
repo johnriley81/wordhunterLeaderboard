@@ -1,11 +1,11 @@
-"""Simple in-process IP rate limiting (one request per minute)."""
+"""Simple in-process IP rate limiting (one request per 30 seconds)."""
 
 from __future__ import annotations
 
 import time
 from threading import Lock
 
-RATE_LIMIT_SECONDS = 60
+RATE_LIMIT_SECONDS = 30
 
 _lock = Lock()
 _last_request_at: dict[str, float] = {}
