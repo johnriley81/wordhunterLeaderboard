@@ -53,7 +53,21 @@ Python helpers live in **`puzzle_calendar.py`** (`day_index_since_rotation`, `te
 - `gameLetters`: flat letter pool at puzzle start (row-major starting grid + padded `next_letters`)
 - `wordsPlayed`: ordered list of submitted words (lowercase)
 
+**Recommended:** `sessionId` — UUID v4 string, stable per puzzle day on the client (stored in `localStorage` keyed by puzzle id). When present and valid, the server UPSERTs on `(puzzle, session_id)` instead of deduplicating by `(player, score, trophy)`.
+
 **trophy** must appear in `wordsPlayed`. The server recomputes score by consuming tiles from `gameLetters` in order; submitted `score` must match.
+
+### Session UPSERT semantics (`sessionId`)
+
+| Case | DB change | `message` |
+|------|-----------|-----------|
+| No row for `(puzzle, session_id)` | INSERT | `Record inserted successfully.` |
+| Existing row and `new_score > existing_score` | UPDATE `score`, `trophy`, `player`, `time` | `Record updated successfully.` |
+| Existing row and `new_score <= existing_score` | none | `Score not improved.` |
+
+Legacy clients without `sessionId` (or with an invalid value) fall back to the previous insert-with-COUNT dedup path. `scoreValidation` is still required and validated on every POST.
+
+Migration SQL: `schema/migration_session_id.sql`.
 
 ---
 
@@ -73,7 +87,7 @@ const payload = typeof data.body === "string" ? JSON.parse(data.body) : data;
 
 **GET success:** JSON array, up to 10 rows, each `[player, score, trophy]`.
 
-**POST success (200):** `{ "message": string, "top_10": [ ... ] }` for business outcomes (reject name, invalid trace, duplicate, success). **400** for bad JSON or missing required fields. **429** for rate limit. **500** for DB connection errors.
+**POST success (200):** `{ "message": string, "top_10": [ ... ] }` for business outcomes (reject name, invalid trace, duplicate/legacy, insert, update, score not improved). **400** for bad JSON or missing required fields. **429** for rate limit. **500** for DB connection errors.
 
 ---
 
@@ -104,6 +118,7 @@ Game is served at **https://wordhunter.io**. Successful Flask responses set `Acc
 ## 8. Game repo changes (context for API authors)
 
 - Always emit **`scoreValidation`** on leaderboard `POST`.
+- Send **`sessionId`** (stable UUID per puzzle day) on leaderboard `POST`.
 - Use **one** puzzle id: local day index since **2026-05-19**, for leaderboard URL and puzzle row.
 - Parse responses with the Gateway vs Flask helper above.
 - Point **`leaderboardLink`** at production when shipping.
@@ -116,7 +131,7 @@ Game is served at **https://wordhunter.io**. Successful Flask responses set `Acc
 |------|------|
 | `handler.py` | Lambda entry; Secrets Manager; JSON string `body` + CORS |
 | `wordhunter_leaderboard.py` | Flask; plain JSON responses |
-| `leaderboard_ops.py` | `validate_score_payload`, `validate_player_name`, `try_insert_leaderboard` |
+| `leaderboard_ops.py` | `validate_score_payload`, `validate_player_name`, `try_save_leaderboard`, session UPSERT helpers |
 | `wordhunter_scoring.py` | Tile segmentation + `letterSum * length` |
 | `puzzle_calendar.py` | Rotation epoch + `template_row_index` |
 | `rate_limit.py` | Per-IP request throttling |
