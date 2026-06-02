@@ -8,9 +8,6 @@ from better_profanity import profanity
 from wordhunter_scoring import iter_tiles, score_word_for_validation
 
 _NAME_SANITIZE_RE = re.compile(r"[^a-zA-Z]")
-_UUID_RE = re.compile(
-    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
-)
 _MAX_PLAYER_NAME_LEN = 8
 
 # Uppercase names that pass sanitize but must not appear on the leaderboard.
@@ -104,15 +101,6 @@ def validate_score_payload(payload, submitted_score: int, trophy: str) -> int:
     return score
 
 
-def normalize_session_id(session_id) -> str | None:
-    if session_id is None:
-        return None
-    value = str(session_id).strip()
-    if not value or not _UUID_RE.match(value):
-        return None
-    return value.lower()
-
-
 def try_insert_leaderboard(cur, conn, puzzle, time_stamp, player, score, trophy):
     cur.execute(
         f"SELECT COUNT(*) FROM leaderboard WHERE puzzle={puzzle} AND player='{player}' AND score={score} AND trophy='{trophy}'"
@@ -124,42 +112,3 @@ def try_insert_leaderboard(cur, conn, puzzle, time_stamp, player, score, trophy)
         conn.commit()
         return "Record inserted successfully."
     return "This record already exists."
-
-
-def try_upsert_leaderboard_session(
-    cur, conn, puzzle, time_stamp, player, score, trophy, session_id
-):
-    cur.execute(
-        "SELECT score FROM leaderboard WHERE puzzle=%s AND session_id=%s",
-        (puzzle, session_id),
-    )
-    row = cur.fetchone()
-    if row is None:
-        cur.execute(
-            "INSERT INTO leaderboard (puzzle, time, player, score, trophy, session_id) "
-            "VALUES (%s, %s, %s, %s, %s, %s)",
-            (puzzle, time_stamp, player, score, trophy, session_id),
-        )
-        conn.commit()
-        return "Record inserted successfully."
-    existing_score = int(row[0])
-    if score > existing_score:
-        cur.execute(
-            "UPDATE leaderboard SET time=%s, player=%s, score=%s, trophy=%s "
-            "WHERE puzzle=%s AND session_id=%s",
-            (time_stamp, player, score, trophy, puzzle, session_id),
-        )
-        conn.commit()
-        return "Record updated successfully."
-    return "Score not improved."
-
-
-def try_save_leaderboard(
-    cur, conn, puzzle, time_stamp, player, score, trophy, session_id_raw=None
-):
-    session_id = normalize_session_id(session_id_raw)
-    if session_id:
-        return try_upsert_leaderboard_session(
-            cur, conn, puzzle, time_stamp, player, score, trophy, session_id
-        )
-    return try_insert_leaderboard(cur, conn, puzzle, time_stamp, player, score, trophy)

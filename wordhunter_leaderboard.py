@@ -14,7 +14,7 @@ import time
 import os
 
 from leaderboard_ops import (
-    try_save_leaderboard,
+    try_insert_leaderboard,
     validate_player_name,
     validate_score_payload,
 )
@@ -117,15 +117,8 @@ def leaderboard(puzzle):
                         f"Invalid score for player: {player} with:\n{score_validation}"
                     )
                 else:
-                    message = try_save_leaderboard(
-                        cur,
-                        conn,
-                        puzzle,
-                        time_stamp,
-                        player,
-                        score,
-                        trophy,
-                        body.get("sessionId"),
+                    message = try_insert_leaderboard(
+                        cur, conn, puzzle, time_stamp, player, score, trophy
                     )
             cur.execute(
                 f"SELECT player, score, trophy FROM leaderboard WHERE puzzle={puzzle} ORDER BY score DESC, time LIMIT 10"
