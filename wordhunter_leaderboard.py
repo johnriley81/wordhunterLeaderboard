@@ -9,13 +9,16 @@ except ImportError:
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from better_profanity import profanity
 import pymysql
 import time
 import os
 
-from config import score_trace_validation_enabled
-from leaderboard_ops import get_next_letters, try_insert_leaderboard, validate_game
+from leaderboard_ops import (
+    try_insert_leaderboard,
+    validate_player_name,
+    validate_score_payload,
+)
+from rate_limit import check_rate_limit
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -28,9 +31,21 @@ RDS_DB = os.environ.get("RDS_DB")
 _CORS_HEADER = {"Access-Control-Allow-Origin": "https://wordhunter.io"}
 
 
+def _client_ip() -> str:
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.remote_addr or "unknown"
+
+
 @app.route("/leaderboard/<int:puzzle>", methods=["GET", "POST"])
 def leaderboard(puzzle):
-    validate_trace = score_trace_validation_enabled()
+    if not check_rate_limit(_client_ip()):
+        resp = jsonify({"message": "Rate limit exceeded. Try again in one minute."})
+        resp.status_code = 429
+        for k, v in _CORS_HEADER.items():
+            resp.headers[k] = v
+        return resp
 
     if request.method == "GET":
         try:
@@ -68,13 +83,9 @@ def leaderboard(puzzle):
             ),
             400,
         )
-    if validate_trace and "scoreValidation" not in body:
+    if "scoreValidation" not in body:
         return (
-            jsonify(
-                {
-                    "message": "Missing required field: scoreValidation (WORDHUNTER_VALIDATE_SCORE is enabled)",
-                }
-            ),
+            jsonify({"message": "Missing required field: scoreValidation"}),
             400,
         )
 
@@ -96,13 +107,12 @@ def leaderboard(puzzle):
 
     try:
         with conn.cursor() as cur:
-            if player == "" or profanity.contains_profanity(player):
-                message = f"Invalid player name: {player}"
-            elif validate_trace:
+            name_error = validate_player_name(player)
+            if name_error:
+                message = name_error
+            else:
                 score_validation = body["scoreValidation"]
-                if score != validate_game(
-                    score_validation, get_next_letters(puzzle), trophy
-                ):
+                if validate_score_payload(score_validation, score, trophy) != score:
                     message = (
                         f"Invalid score for player: {player} with:\n{score_validation}"
                     )
@@ -110,10 +120,6 @@ def leaderboard(puzzle):
                     message = try_insert_leaderboard(
                         cur, conn, puzzle, time_stamp, player, score, trophy
                     )
-            else:
-                message = try_insert_leaderboard(
-                    cur, conn, puzzle, time_stamp, player, score, trophy
-                )
             cur.execute(
                 f"SELECT player, score, trophy FROM leaderboard WHERE puzzle={puzzle} ORDER BY score DESC, time LIMIT 10"
             )

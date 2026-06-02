@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date
 
 # Local calendar days; client should use the same midnight boundary in its timezone.
-PUZZLE_ROTATION_EPOCH = date(2026, 4, 26)
+PUZZLE_ROTATION_EPOCH = date(2026, 5, 19)
 
 
 def day_index_since_rotation(d: date) -> int:
@@ -14,7 +14,7 @@ def day_index_since_rotation(d: date) -> int:
 
 
 def template_row_index(puzzle_id: int, pool_size: int) -> int:
-    """Row in ``nextletters.txt`` / ``puzzles.txt`` pool: ``puzzle_id % pool_size``."""
+    """Row in the puzzles pool: ``puzzle_id % pool_size``."""
     if pool_size <= 0:
         raise ValueError("pool_size must be positive")
     return puzzle_id % pool_size

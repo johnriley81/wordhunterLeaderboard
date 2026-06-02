@@ -1,16 +1,15 @@
 import boto3
 from botocore.exceptions import ClientError
-from better_profanity import profanity
 import pymysql
 import json
 import time
 
-from config import score_trace_validation_enabled
 from leaderboard_ops import (
-    get_next_letters,
     try_insert_leaderboard,
-    validate_game,
+    validate_player_name,
+    validate_score_payload,
 )
+from rate_limit import check_rate_limit
 
 CORS_HEADERS = {
     'Access-Control-Allow-Origin': 'https://wordhunter.io',
@@ -55,11 +54,25 @@ def _json_response(status_code: int, payload):
     }
 
 
+def _client_ip(event) -> str:
+    headers = event.get("headers") or {}
+    forwarded = headers.get("X-Forwarded-For") or headers.get("x-forwarded-for") or ""
+    if forwarded:
+        return str(forwarded).split(",")[0].strip()
+    source = event.get("requestContext", {}).get("identity", {})
+    return source.get("sourceIp") or "unknown"
+
+
 def lambda_handler(event, context):
     http_method = event['httpMethod']
     puzzle = int(event['pathParameters']['puzzle'])
-    validate_trace = score_trace_validation_enabled()
     body = None
+
+    if not check_rate_limit(_client_ip(event)):
+        return _json_response(
+            429,
+            {'message': 'Rate limit exceeded. Try again in one minute.'},
+        )
 
     if http_method == 'POST':
         raw = event.get('body') or '{}'
@@ -74,12 +87,10 @@ def lambda_handler(event, context):
                 400,
                 {'message': f'Missing required field(s): {", ".join(missing)}'},
             )
-        if validate_trace and 'scoreValidation' not in body:
+        if 'scoreValidation' not in body:
             return _json_response(
                 400,
-                {
-                    'message': 'Missing required field: scoreValidation (WORDHUNTER_VALIDATE_SCORE is enabled)',
-                },
+                {'message': 'Missing required field: scoreValidation'},
             )
 
     conn = None
@@ -104,13 +115,12 @@ def lambda_handler(event, context):
             time_stamp = int(time.time())
 
             with conn.cursor() as cur:
-                if player == "" or profanity.contains_profanity(player):
-                    message = f"Invalid player name: {player}"
-                elif validate_trace:
+                name_error = validate_player_name(player)
+                if name_error:
+                    message = name_error
+                else:
                     score_validation = body['scoreValidation']
-                    if score != validate_game(
-                        score_validation, get_next_letters(puzzle), trophy
-                    ):
+                    if validate_score_payload(score_validation, score, trophy) != score:
                         message = (
                             f"Invalid score for player: {player} with:\n{score_validation}"
                         )
@@ -118,10 +128,6 @@ def lambda_handler(event, context):
                         message = try_insert_leaderboard(
                             cur, conn, puzzle, time_stamp, player, score, trophy
                         )
-                else:
-                    message = try_insert_leaderboard(
-                        cur, conn, puzzle, time_stamp, player, score, trophy
-                    )
 
                 cur.execute(
                     f"SELECT player, score, trophy FROM leaderboard WHERE puzzle={puzzle} ORDER BY score DESC, time LIMIT 10"

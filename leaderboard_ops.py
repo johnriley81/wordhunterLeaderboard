@@ -1,67 +1,104 @@
-"""Shared leaderboard validation and next-letter loading."""
+"""Shared leaderboard validation and DB insert helpers."""
 
 from __future__ import annotations
 
-from collections import deque
-import json
+import re
 
-from puzzle_calendar import template_row_index
-from wordhunter_scoring import score_word_for_validation
+from better_profanity import profanity
+from wordhunter_scoring import iter_tiles, score_word_for_validation
+
+_NAME_SANITIZE_RE = re.compile(r"[^a-zA-Z]")
+_MAX_PLAYER_NAME_LEN = 8
+
+# Uppercase names that pass sanitize but must not appear on the leaderboard.
+_PROHIBITED_LEADERBOARD_NAMES = frozenset(
+    {
+        "FUCK",
+        "SHIT",
+        "CUNT",
+        "NIGGER",
+        "NIGGA",
+        "FAGGOT",
+        "FAG",
+        "RETARD",
+        "WHORE",
+        "SLUT",
+        "BITCH",
+        "ASSHOLE",
+        "DICK",
+        "COCK",
+        "PENIS",
+        "VAGINA",
+        "NAZI",
+        "KKK",
+    }
+)
 
 
-def validate_turn(word, letters, replacement_count, next_letters):
-    for letter in set(word):
-        if letter not in letters:
-            return False, None
-
-    validation_board = list(letters)
-    for letter in set(word):
-        if letter in validation_board:
-            validation_board.remove(letter)
-
-    for _ in range(replacement_count):
-        if next_letters:
-            validation_board.append(next_letters.popleft())
-        else:
-            validation_board.append(" ")
-
-    return True, "".join(validation_board)
+def normalize_player_name(player: str) -> str:
+    return _NAME_SANITIZE_RE.sub("", str(player or "")).upper()[:_MAX_PLAYER_NAME_LEN]
 
 
-def validate_game(validation_data, next_letters, trophy):
-    trophy_found = False
-    if not validation_data:
+def validate_player_name(player: str) -> str | None:
+    """Return an error message when the name is not allowed, else None."""
+    raw = str(player or "")
+    if not raw.strip():
+        return "Invalid player name: empty"
+    if profanity.contains_profanity(raw):
+        return f"Invalid player name: {raw} (profanity)"
+    normalized = normalize_player_name(raw)
+    if not normalized:
+        return f"Invalid player name: {raw}"
+    if normalized in _PROHIBITED_LEADERBOARD_NAMES:
+        return f"Invalid player name: {raw} (prohibited)"
+    return None
+
+
+def _consume_word_tiles_from_pool(pool: list[str], word: str) -> bool:
+    for tile in iter_tiles(word):
+        key = str(tile or "").lower()
+        try:
+            pool.remove(key)
+        except ValueError:
+            return False
+    return True
+
+
+def validate_score_payload(payload, submitted_score: int, trophy: str) -> int:
+    """Validate words against gameLetters and return computed score, or 0 if invalid."""
+    if not isinstance(payload, dict):
         return 0
+
+    game_letters = payload.get("gameLetters")
+    words_played = payload.get("wordsPlayed")
+    if not isinstance(game_letters, list) or not isinstance(words_played, list):
+        return 0
+    if not words_played:
+        return 0
+
+    pool = [str(t or "").lower() for t in game_letters]
     score = 0
-    next_letters = deque(next_letters)
-    for idx, turn_data in enumerate(validation_data):
-        word, letters, replacement_count = turn_data
-        if word == trophy:
+    trophy_found = False
+    trophy_norm = str(trophy or "").strip().lower()
+
+    for raw_word in words_played:
+        word = str(raw_word or "").lower()
+        if not word:
+            return 0
+        if word == trophy_norm:
             trophy_found = True
-        if replacement_count < 3:
+        if not _consume_word_tiles_from_pool(pool, word):
             return 0
-        score += score_word_for_validation(word)
-        is_valid, validation_board = validate_turn(
-            word, letters, replacement_count, next_letters
-        )
-        if not is_valid:
+        try:
+            score += score_word_for_validation(word)
+        except (KeyError, ValueError):
             return 0
 
-        if idx + 1 < len(validation_data):
-            next_turn_letters = set(validation_data[idx + 1][1])
-            if not all(letter in validation_board for letter in next_turn_letters):
-                return 0
-
-    if trophy_found:
-        return score
-    return 0
-
-
-def get_next_letters(puzzle_id: int, *, path: str = "nextletters.txt"):
-    with open(path, "r", encoding="utf-8") as file:
-        lines = file.readlines()
-    row = template_row_index(puzzle_id, len(lines))
-    return json.loads(lines[row].strip())
+    if not trophy_found:
+        return 0
+    if score != int(submitted_score):
+        return 0
+    return score
 
 
 def try_insert_leaderboard(cur, conn, puzzle, time_stamp, player, score, trophy):
